@@ -12,9 +12,39 @@ import util.judge_df_equal
 import tempfile
 
 
-def pandas_q2(timediff:int, lineitem:pd.DataFrame) -> pd.DataFrame:
+def calculate_sum_disc_price(group):
+    """Calculate the sum of discounted prices."""
+    return (group['l_extendedprice'] * (1 - group['l_discount'])).sum()
+
+def calculate_sum_charge(group):
+    """Calculate the sum of charged prices after discount and tax."""
+    return (group['l_extendedprice'] * (1 - group['l_discount']) * (1 + group['l_tax'])).sum()
+
+
+
+def pandas_q2(timediff, lineitem):
     #TODO: your codes begin
-    return pd.DataFrame()
+    lineitem['l_shipdate'] = pd.to_datetime(lineitem['l_shipdate'])
+    date = pd.Timestamp('1998-12-01') - pd.Timedelta(days=timediff)
+    filtered_df = lineitem[lineitem['l_shipdate'] <= date]
+    grouped = filtered_df.groupby(['l_returnflag', 'l_linestatus'])
+
+    # Calculate each metric
+    result_df = pd.DataFrame({
+        'sum_qty': grouped['l_quantity'].sum(),
+        'sum_base_price': grouped['l_extendedprice'].sum(),
+        'sum_disc_price': grouped.apply(calculate_sum_disc_price),
+        'sum_charge': grouped.apply(calculate_sum_charge),
+        'avg_qty': grouped['l_quantity'].mean(),
+        'avg_price': grouped['l_extendedprice'].mean(),
+        'avg_disc': grouped['l_discount'].mean(),
+        'count_order': grouped.size()
+    }).reset_index()
+
+    result_df = result_df.sort_values(by=['l_returnflag', 'l_linestatus'])
+    
+    return result_df
+
     #end of your codes
 
 
