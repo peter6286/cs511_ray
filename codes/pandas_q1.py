@@ -8,11 +8,14 @@
 import pandas as pd
 import ray
 import typing
+import time
+
 
 def pandas_q1(time: str, lineitem:pd.DataFrame) -> float:
     start_date = pd.to_datetime(time)
     
     lineitem['l_shipdate'] = pd.to_datetime(lineitem['l_shipdate'])
+    
     
     end_date = start_date + pd.DateOffset(years=1)
 
@@ -43,7 +46,9 @@ if __name__ == "__main__":
                         'l_discount', 'l_tax', 'l_returnflag', 'l_linestatus', 'l_shipdate', 'l_commitdate',
                         'l_receiptdate', 'l_shipinstruct', 'l_shipmode', 'l_comment']
     # run the test
-    result = pandas_q1("1994-01-01", lineitem)    
+    start = time.time()
+    result = pandas_q1("1994-01-01", lineitem)
+    print("duration =", time.time() - start)
     try:
         assert abs(result - 123141078.2283) < 0.01
         print("*******************pass**********************")

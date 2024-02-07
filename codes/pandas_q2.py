@@ -13,11 +13,9 @@ import tempfile
 
 
 def calculate_sum_disc_price(group):
-    """Calculate the sum of discounted prices."""
     return (group['l_extendedprice'] * (1 - group['l_discount'])).sum()
 
 def calculate_sum_charge(group):
-    """Calculate the sum of charged prices after discount and tax."""
     return (group['l_extendedprice'] * (1 - group['l_discount']) * (1 + group['l_tax'])).sum()
 
 
