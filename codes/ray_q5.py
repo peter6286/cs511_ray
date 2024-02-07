@@ -12,17 +12,24 @@ import ray
 import typing
 import util.judge_df_equal
 
+ray.init()
+@ray.remote
+def filter_orders(orders, start_date, end_date):
+    filtered_orders = orders[(orders['o_orderdate'] >= start_date) & (orders['o_orderdate'] < end_date)]
+    return filtered_orders
+
+@ray.remote
+def find_valid_lineitems(lineitem):
+    valid_lineitems = lineitem[lineitem['l_commitdate'] < lineitem['l_receiptdate']]['l_orderkey'].unique()
+    return valid_lineitems
 
 @ray.remote
 def process_orders_chunk(orders_chunk, valid_keys):
     # Filter orders based on valid_lineitems
     valid_orders_chunk = orders_chunk[orders_chunk['o_orderkey'].isin(valid_keys)]
-    
     # Group by o_orderpriority and count
     grouped = valid_orders_chunk.groupby('o_orderpriority').size().reset_index(name='order_count')
-    
     return grouped
-
 
 def ray_q4(time: str, orders: pd.DataFrame, lineitem: pd.DataFrame) -> pd.DataFrame:
     # Convert strings to datetime
@@ -34,27 +41,36 @@ def ray_q4(time: str, orders: pd.DataFrame, lineitem: pd.DataFrame) -> pd.DataFr
     start_date = pd.to_datetime(time)
     end_date = start_date + pd.DateOffset(months=3)
 
-    filtered_orders = orders[(orders['o_orderdate'] >= start_date) & (orders['o_orderdate'] < end_date)]
+    # Parallel filter orders and find valid lineitems
+    filtered_orders_future = filter_orders.remote(orders, start_date, end_date)
+    valid_lineitems_future = find_valid_lineitems.remote(lineitem)
 
-    # Identify lineitems with l_commitdate < l_receiptdate
-    valid_lineitems = lineitem[lineitem['l_commitdate'] < lineitem['l_receiptdate']]['l_orderkey'].unique()
+    # Wait for the parallel tasks to complete
+    filtered_orders = ray.get(filtered_orders_future)
+    valid_lineitems = ray.get(valid_lineitems_future)
     
     # Broadcast the valid keys to all actors
     valid_keys_id = ray.put(valid_lineitems)
 
-    # Split the orders DataFrame into chunks
-    orders_chunks = np.array_split(filtered_orders, 4)  # The number of chunks can be adjusted
+    # Split the filtered orders DataFrame into chunks
+    orders_chunks = np.array_split(filtered_orders, 4)  # Adjust the number of chunks as needed
 
     # Distribute the computation across the chunks
     futures = [process_orders_chunk.remote(chunk, valid_keys_id) for chunk in orders_chunks]
     
     # Collect and combine the results
     partial_results = ray.get(futures)
-    combined_results = pd.concat(partial_results).groupby('o_orderpriority').sum().reset_index()
+    combined_results = pd.concat(partial_results)
+
+    # Aggregate the results properly
+    final_results = combined_results.groupby('o_orderpriority', as_index=False).sum()
 
     # Order by o_orderpriority
-    ordered_results = combined_results.sort_values(by='o_orderpriority')
+    ordered_results = final_results.sort_values(by='o_orderpriority')
+
+    # Shutdown Ray
     ray.shutdown()
+
     return ordered_results
 
 

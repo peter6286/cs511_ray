@@ -9,15 +9,67 @@ import tempfile
 
 import pandas as pd
 import ray
+import numpy as np
 import typing
 
 import util.judge_df_equal
 
+ray.init(ignore_reinit_error=True)
+
+def calculate_revenue(group):
+    return pd.Series({
+        'revenue': (group['l_extendedprice'] * (1 - group['l_discount'])).sum()
+    })
+
+
+@ray.remote
+def process_chunk(customer_df, orders_chunk, lineitem_chunk, segment, cutoff_date):
+    # Filter based on the segment and cutoff_date for orders and lineitem
+    filtered_customers = customer_df[customer_df['c_mktsegment'] == segment]
+    filtered_orders = orders_chunk[orders_chunk['o_orderdate'] < cutoff_date]
+    filtered_lineitem = lineitem_chunk[lineitem_chunk['l_shipdate'] > cutoff_date]
+    
+    # Perform the joins
+    cust_orders = filtered_customers.merge(filtered_orders, left_on='c_custkey', right_on='o_custkey')
+    merged_df = cust_orders.merge(filtered_lineitem, left_on='o_orderkey', right_on='l_orderkey')
+    
+    # Group by and calculate revenue
+    grouped = merged_df.groupby(['l_orderkey', 'o_orderdate', 'o_shippriority'])
+    result = grouped.apply(calculate_revenue).reset_index()
+    
+    return result
+
+
+
 
 def ray_q3(segment: str, customer: pd.DataFrame, orders: pd.DataFrame, lineitem: pd.DataFrame) -> pd.DataFrame:
-    #TODO: your codes begin
-    return pd.DataFrame()
-    #end of your codes
+    # Convert date columns to datetime
+    orders['o_orderdate'] = pd.to_datetime(orders['o_orderdate'])
+    lineitem['l_shipdate'] = pd.to_datetime(lineitem['l_shipdate'])
+    cutoff_date = pd.Timestamp('1995-03-15')
+    # Broadcast the smaller DataFrame
+    customer_id = ray.put(customer)
+
+
+    orders_chunks = np.array_split(orders, 4)  # The number of chunks can be adjusted
+    lineitem_chunks = np.array_split(lineitem, 4)
+    
+    # Distribute the computation across the chunks
+    futures = [process_chunk.remote(customer_id, orders_chunk, lineitem_chunk, segment, cutoff_date)
+               for orders_chunk, lineitem_chunk in zip(orders_chunks, lineitem_chunks)]
+    
+    # Collect the results
+    partial_results = ray.get(futures)
+    
+    # Combine the partial results
+    combined_results = pd.concat(partial_results)
+    
+    # Final aggregation to get the top 10 results
+    final_result = combined_results.sort_values(by=['revenue', 'o_orderdate'], ascending=[False, True]).head(10)
+    
+    return final_result
+
+   
 
 
 
