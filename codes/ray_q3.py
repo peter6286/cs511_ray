@@ -96,7 +96,7 @@ if __name__ == "__main__":
 
     # run the test
     result = ray_q3('BUILDING', customer, orders, lineitem)
-    result.to_csv("test.csv", float_format='%.3f')
+    #result.to_csv("test.csv", float_format='%.3f')
     with tempfile.NamedTemporaryFile(mode='w') as f:
         result.to_csv(f.name, float_format='%.3f',index=False)
         result = pd.read_csv(f.name)

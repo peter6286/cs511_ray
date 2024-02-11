@@ -75,7 +75,7 @@ if __name__ == "__main__":
 
     # run the test
     result = ray_q4("1993-9-01",orders,lineitem)
-    result.to_csv("test2.csv", float_format='%.3f')
+    #result.to_csv("test2.csv", float_format='%.3f')
     with tempfile.NamedTemporaryFile(mode='w') as f:
         result.to_csv(f.name, float_format='%.3f',index=False)
         result = pd.read_csv(f.name)

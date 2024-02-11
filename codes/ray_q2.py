@@ -89,7 +89,7 @@ if __name__ == "__main__":
                         'l_receiptdate', 'l_shipinstruct', 'l_shipmode', 'l_comment']
     # run the test
     result = ray_q2(90, lineitem)
-    result.to_csv("test.csv", float_format='%.3f')
+    #result.to_csv("test.csv", float_format='%.3f')
     with tempfile.NamedTemporaryFile(mode='w') as f:
         result.to_csv(f.name, float_format='%.3f',index=False)
         result = pd.read_csv(f.name)
