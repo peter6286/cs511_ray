@@ -58,8 +58,8 @@ if __name__ == "__main__":
                       'o_clerk', 'o_shippriority', 'o_comment']
 
     # run the test
-    result = pandas_q4("1993-7-01",orders,lineitem)
-    # result.to_csv("correct_results/pandas_q4.csv", float_format='%.3f')
+    result = pandas_q4("1998-7-01",orders,lineitem)
+    result.to_csv("test.csv", float_format='%.3f')
     with tempfile.NamedTemporaryFile(mode='w') as f:
         result.to_csv(f.name, float_format='%.3f',index=False)
         result = pd.read_csv(f.name)

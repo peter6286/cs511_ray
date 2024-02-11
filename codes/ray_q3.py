@@ -23,53 +23,56 @@ def calculate_revenue(group):
 
 
 @ray.remote
-def process_chunk(customer_df, orders_chunk, lineitem_chunk, segment, cutoff_date):
-    # Filter based on the segment and cutoff_date for orders and lineitem
-    filtered_customers = customer_df[customer_df['c_mktsegment'] == segment]
-    filtered_orders = orders_chunk[orders_chunk['o_orderdate'] < cutoff_date]
-    filtered_lineitem = lineitem_chunk[lineitem_chunk['l_shipdate'] > cutoff_date]
+def process_chunk(orders_filtered, lineitem_chunk, cutoff_date):
+    # Join the orders with the chunk of lineitem
+    merged_df = pd.merge(orders_filtered, lineitem_chunk, left_on='o_orderkey', right_on='l_orderkey')
     
-    # Perform the joins
-    cust_orders = filtered_customers.merge(filtered_orders, left_on='c_custkey', right_on='o_custkey')
-    merged_df = cust_orders.merge(filtered_lineitem, left_on='o_orderkey', right_on='l_orderkey')
-    
-    # Group by and calculate revenue
-    grouped = merged_df.groupby(['l_orderkey', 'o_orderdate', 'o_shippriority'])
-    result = grouped.apply(calculate_revenue).reset_index()
-    
-    return result
+    # Filter lineitems further if necessary
+    filtered_lineitem = merged_df[merged_df['l_shipdate'] > cutoff_date]
 
+    if not filtered_lineitem.empty:
+        # Group by and calculate revenue based on the condition
+        grouped = filtered_lineitem.groupby(['l_orderkey', 'o_orderdate', 'o_shippriority']).apply(calculate_revenue).reset_index()
+        return grouped
+    else:
+        return pd.DataFrame(columns=['l_orderkey', 'o_orderdate', 'o_shippriority', 'revenue'])
 
 
 
 def ray_q3(segment: str, customer: pd.DataFrame, orders: pd.DataFrame, lineitem: pd.DataFrame) -> pd.DataFrame:
-    # Convert date columns to datetime
+    # Preprocessing steps
     orders['o_orderdate'] = pd.to_datetime(orders['o_orderdate'])
     lineitem['l_shipdate'] = pd.to_datetime(lineitem['l_shipdate'])
     cutoff_date = pd.Timestamp('1995-03-15')
-    # Broadcast the smaller DataFrame
-    customer_id = ray.put(customer)
 
+    # Filter orders based on segment and date
+    filtered_customers = customer[customer['c_mktsegment'] == segment]
+    filtered_orders = pd.merge(filtered_customers, orders[orders['o_orderdate'] < cutoff_date], left_on='c_custkey', right_on='o_custkey')
 
-    orders_chunks = np.array_split(orders, 4)  # The number of chunks can be adjusted
-    lineitem_chunks = np.array_split(lineitem, 4)
-    
+    # Broadcast the filtered orders DataFrame
+    orders_filtered_id = ray.put(filtered_orders)
+
+    # Split the lineitem DataFrame into chunks
+    lineitem_chunks = np.array_split(lineitem, 4)  # The number of chunks can be adjusted
+
     # Distribute the computation across the chunks
-    futures = [process_chunk.remote(customer_id, orders_chunk, lineitem_chunk, segment, cutoff_date)
-               for orders_chunk, lineitem_chunk in zip(orders_chunks, lineitem_chunks)]
+    futures = [process_chunk.remote(orders_filtered_id, chunk, cutoff_date) for chunk in lineitem_chunks]
     
     # Collect the results
     partial_results = ray.get(futures)
     
-    # Combine the partial results
-    combined_results = pd.concat(partial_results)
-    
-    # Final aggregation to get the top 10 results
+    # Combine the partial results and perform the final aggregation
+    combined_results = pd.concat(partial_results, ignore_index=True) if partial_results else pd.DataFrame()
+    combined_results = combined_results.groupby(['l_orderkey', 'o_orderdate', 'o_shippriority'], as_index=False).agg(
+            revenue=('revenue', 'sum')
+        )
+    # Assuming calculate_revenue needs to be applied after grouping, not shown here
     final_result = combined_results.sort_values(by=['revenue', 'o_orderdate'], ascending=[False, True]).head(10)
-    
-    return final_result
 
-   
+    ray.shutdown()
+    return final_result
+    
+
 
 
 
@@ -93,7 +96,7 @@ if __name__ == "__main__":
 
     # run the test
     result = ray_q3('BUILDING', customer, orders, lineitem)
-    # result.to_csv("correct_results/pandas_q3.csv", float_format='%.3f')
+    result.to_csv("test.csv", float_format='%.3f')
     with tempfile.NamedTemporaryFile(mode='w') as f:
         result.to_csv(f.name, float_format='%.3f',index=False)
         result = pd.read_csv(f.name)

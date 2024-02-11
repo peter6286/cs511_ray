@@ -1,4 +1,3 @@
-28123
 """
  	 Author: University of Illinois at Urbana Champaign
  	 Date: 2023-09-10 20:19:52
@@ -57,7 +56,7 @@ def aggregate_results(futures):
         'sum_charge': final_grouped['sum_charge'].sum(),
         'avg_qty': final_grouped['avg_qty'].mean(),
         'avg_price': final_grouped['avg_price'].sum() / final_grouped['count_order'].sum(),
-        'avg_disc': final_grouped['avg_disc'].mean(), 
+        'avg_disc': final_grouped['avg_disc'].mean(),  # Note: This is an approximation
         'count_order': final_grouped['count_order'].sum()
     }).reset_index().sort_values(by=['l_returnflag', 'l_linestatus'])
 
