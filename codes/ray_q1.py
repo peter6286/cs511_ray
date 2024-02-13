@@ -31,19 +31,10 @@ def process_chunk(chunk, start_date, end_date):
 def ray_q1(time_1: str, lineitem:pd.DataFrame) -> float:
     
     ray.init(ignore_reinit_error=True)
-
     start_date = pd.to_datetime(time_1)
     end_date = start_date + pd.DateOffset(years=1)
-    
-
-    
-    # Divide the data
-    chunks = np.array_split(lineitem, 4)  # Adjust the number of chunks as needed
-    
-    # Distribute the chunks to the processing function
+    chunks = np.array_split(lineitem, 4)  
     futures = [process_chunk.remote(chunk, start_date, end_date) for chunk in chunks]
-    
-    # Gather and sum the results
     revenues = ray.get(futures)
     total_revenue = sum(revenues)
     ray.shutdown()

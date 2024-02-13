@@ -16,11 +16,9 @@ ray.init(ignore_reinit_error=True)
 
 
 def calculate_sum_disc_price(group):
-    """Calculate the sum of discounted prices."""
     return (group['l_extendedprice'] * (1 - group['l_discount'])).sum()
 
 def calculate_sum_charge(group):
-    """Calculate the sum of charged prices after discount and tax."""
     return (group['l_extendedprice'] * (1 - group['l_discount']) * (1 + group['l_tax'])).sum()
 
 @ray.remote
@@ -46,7 +44,6 @@ def aggregate_results(futures):
     partial_results = ray.get(futures)
     combined_result = pd.concat(partial_results, ignore_index=True)
     
-    # Need to aggregate again since the same groups may be split across different chunks
     final_grouped = combined_result.groupby(['l_returnflag', 'l_linestatus'])
     
     final_result = pd.DataFrame({
@@ -56,7 +53,7 @@ def aggregate_results(futures):
         'sum_charge': final_grouped['sum_charge'].sum(),
         'avg_qty': final_grouped['avg_qty'].mean(),
         'avg_price': final_grouped['avg_price'].sum() / final_grouped['count_order'].sum(),
-        'avg_disc': final_grouped['avg_disc'].mean(),  # Note: This is an approximation
+        'avg_disc': final_grouped['avg_disc'].mean(), 
         'count_order': final_grouped['count_order'].sum()
     }).reset_index().sort_values(by=['l_returnflag', 'l_linestatus'])
 
@@ -66,13 +63,9 @@ def aggregate_results(futures):
 def ray_q2(timediff:int, lineitem:pd.DataFrame) -> pd.DataFrame:
     lineitem['l_shipdate'] = pd.to_datetime(lineitem['l_shipdate'])
     cutoff_date = pd.Timestamp('1998-12-01') - pd.Timedelta(days=timediff)
-    
-    chunks = np.array_split(lineitem, 2)  # Adjust the number of chunks based on your setup
-    
+    chunks = np.array_split(lineitem, 2)  
     futures = [process_chunk.remote(chunk, cutoff_date) for chunk in chunks]
-    
     final_result = aggregate_results(futures)
-    
     ray.shutdown()
     return final_result.reset_index(drop=True)
 

@@ -15,44 +15,27 @@ import util.judge_df_equal
 
 @ray.remote
 def process_orders_chunk(orders_chunk, valid_keys):
-    # Filter orders based on valid_lineitems
     valid_orders_chunk = orders_chunk[orders_chunk['o_orderkey'].isin(valid_keys)]
     
-    # Group by o_orderpriority and count
     grouped = valid_orders_chunk.groupby('o_orderpriority').size().reset_index(name='order_count')
     
     return grouped
 
 
 def ray_q4(time: str, orders: pd.DataFrame, lineitem: pd.DataFrame) -> pd.DataFrame:
-    # Convert strings to datetime
     orders['o_orderdate'] = pd.to_datetime(orders['o_orderdate'])
     lineitem['l_commitdate'] = pd.to_datetime(lineitem['l_commitdate'])
     lineitem['l_receiptdate'] = pd.to_datetime(lineitem['l_receiptdate'])
-
-    # Define the date range
     start_date = pd.to_datetime(time)
     end_date = start_date + pd.DateOffset(months=3)
 
     filtered_orders = orders[(orders['o_orderdate'] >= start_date) & (orders['o_orderdate'] < end_date)]
-
-    # Identify lineitems with l_commitdate < l_receiptdate
     valid_lineitems = lineitem[lineitem['l_commitdate'] < lineitem['l_receiptdate']]['l_orderkey'].unique()
-    
-    # Broadcast the valid keys to all actors
     valid_keys_id = ray.put(valid_lineitems)
-
-    # Split the orders DataFrame into chunks
-    orders_chunks = np.array_split(filtered_orders, 4)  # The number of chunks can be adjusted
-
-    # Distribute the computation across the chunks
+    orders_chunks = np.array_split(filtered_orders, 4) 
     futures = [process_orders_chunk.remote(chunk, valid_keys_id) for chunk in orders_chunks]
-    
-    # Collect and combine the results
     partial_results = ray.get(futures)
     combined_results = pd.concat(partial_results).groupby('o_orderpriority').sum().reset_index()
-
-    # Order by o_orderpriority
     ordered_results = combined_results.sort_values(by='o_orderpriority')
     ray.shutdown()
     return ordered_results

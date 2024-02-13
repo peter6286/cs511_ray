@@ -24,14 +24,11 @@ def calculate_revenue(group):
 
 @ray.remote
 def process_chunk(orders_filtered, lineitem_chunk, cutoff_date):
-    # Join the orders with the chunk of lineitem
     merged_df = pd.merge(orders_filtered, lineitem_chunk, left_on='o_orderkey', right_on='l_orderkey')
     
-    # Filter lineitems further if necessary
     filtered_lineitem = merged_df[merged_df['l_shipdate'] > cutoff_date]
 
     if not filtered_lineitem.empty:
-        # Group by and calculate revenue based on the condition
         grouped = filtered_lineitem.groupby(['l_orderkey', 'o_orderdate', 'o_shippriority']).apply(calculate_revenue).reset_index()
         return grouped
     else:
@@ -40,33 +37,19 @@ def process_chunk(orders_filtered, lineitem_chunk, cutoff_date):
 
 
 def ray_q3(segment: str, customer: pd.DataFrame, orders: pd.DataFrame, lineitem: pd.DataFrame) -> pd.DataFrame:
-    # Preprocessing steps
     orders['o_orderdate'] = pd.to_datetime(orders['o_orderdate'])
     lineitem['l_shipdate'] = pd.to_datetime(lineitem['l_shipdate'])
     cutoff_date = pd.Timestamp('1995-03-15')
-
-    # Filter orders based on segment and date
     filtered_customers = customer[customer['c_mktsegment'] == segment]
     filtered_orders = pd.merge(filtered_customers, orders[orders['o_orderdate'] < cutoff_date], left_on='c_custkey', right_on='o_custkey')
-
-    # Broadcast the filtered orders DataFrame
     orders_filtered_id = ray.put(filtered_orders)
-
-    # Split the lineitem DataFrame into chunks
-    lineitem_chunks = np.array_split(lineitem, 4)  # The number of chunks can be adjusted
-
-    # Distribute the computation across the chunks
+    lineitem_chunks = np.array_split(lineitem, 4)  
     futures = [process_chunk.remote(orders_filtered_id, chunk, cutoff_date) for chunk in lineitem_chunks]
-    
-    # Collect the results
     partial_results = ray.get(futures)
-    
-    # Combine the partial results and perform the final aggregation
     combined_results = pd.concat(partial_results, ignore_index=True) if partial_results else pd.DataFrame()
     combined_results = combined_results.groupby(['l_orderkey', 'o_orderdate', 'o_shippriority'], as_index=False).agg(
             revenue=('revenue', 'sum')
         )
-    # Assuming calculate_revenue needs to be applied after grouping, not shown here
     final_result = combined_results.sort_values(by=['revenue', 'o_orderdate'], ascending=[False, True]).head(10)
 
     ray.shutdown()

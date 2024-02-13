@@ -19,31 +19,26 @@ def aggregate_revenue(group):
 
 
 def pandas_q3(segment: str, customer: pd.DataFrame, orders: pd.DataFrame, lineitem: pd.DataFrame) -> pd.DataFrame:
-    #TODO: your codes begin
-    # Convert date columns to datetime
+
     orders['o_orderdate'] = pd.to_datetime(orders['o_orderdate'])
     lineitem['l_shipdate'] = pd.to_datetime(lineitem['l_shipdate'])
     
-    # Filter DataFrames based on conditions
     filtered_customers = customer[customer['c_mktsegment'] == segment]
     filtered_orders = orders[orders['o_orderdate'] < pd.Timestamp('1995-03-15')]
     filtered_lineitem = lineitem[lineitem['l_shipdate'] > pd.Timestamp('1995-03-15')]
     
-    # Merge DataFrames
+
     cust_orders = pd.merge(filtered_customers, filtered_orders, left_on='c_custkey', right_on='o_custkey')
     merged_df = pd.merge(cust_orders, filtered_lineitem, left_on='o_orderkey', right_on='l_orderkey')
     
-    # Group by, aggregate, and calculate revenue
     grouped = merged_df.groupby(['l_orderkey', 'o_orderdate', 'o_shippriority'])
 
     result = grouped.apply(aggregate_revenue).reset_index()
 
-    # Order and select top 10
     result = result.sort_values(by=['revenue', 'o_orderdate'], ascending=[False, True]).head(10)
     
     return result
 
-    #end of your codes
 
 
 

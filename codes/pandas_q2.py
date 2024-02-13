@@ -26,8 +26,6 @@ def pandas_q2(timediff, lineitem):
     date = pd.Timestamp('1998-12-01') - pd.Timedelta(days=timediff)
     filtered_df = lineitem[lineitem['l_shipdate'] <= date]
     grouped = filtered_df.groupby(['l_returnflag', 'l_linestatus'])
-
-    # Calculate each metric
     result_df = pd.DataFrame({
         'sum_qty': grouped['l_quantity'].sum(),
         'sum_base_price': grouped['l_extendedprice'].sum(),

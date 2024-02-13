@@ -13,13 +13,8 @@ import time
 
 def pandas_q1(time: str, lineitem:pd.DataFrame) -> float:
     start_date = pd.to_datetime(time)
-    
     lineitem['l_shipdate'] = pd.to_datetime(lineitem['l_shipdate'])
-    
-    
     end_date = start_date + pd.DateOffset(years=1)
-
-    # Filter the DataFrame based on the given conditions
     filtered_df = lineitem[
         (lineitem['l_shipdate'] >= start_date) &
         (lineitem['l_shipdate'] < end_date) &
