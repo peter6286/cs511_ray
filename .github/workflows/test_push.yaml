@@ -22,8 +22,11 @@ jobs:
       with:
         python-version: 3.8
 
-    - name: Install dependencies
-      run: pip install -r requirements.txt  # If you have a requirements.txt file
+    - name: Install dependencies and start Ray
+      run: |
+        pip install -r requirements.txt
+        ray stop  # Ensure any previous instance of Ray is stopped
+        ray start --head --object-store-memory=5500000000
 
     - name: download the data
       run:  |
